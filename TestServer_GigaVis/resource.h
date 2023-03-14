@@ -23,7 +23,6 @@
 #define IDC_BUTTON_THREAD_DELAY_SET_1   1012
 #define IDC_BUTTON_THREAD_DELAY_SET_2   1013
 #define IDC_LIST_SEND_LOG               1014
-#define IDC_LIST2                       1015
 #define IDC_LIST_RCV_LOG                1015
 
 // Next default values for new objects

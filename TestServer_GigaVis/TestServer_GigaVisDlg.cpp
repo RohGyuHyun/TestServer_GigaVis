@@ -12,8 +12,17 @@
 #define new DEBUG_NEW
 #endif
 
-
 // 응용 프로그램 정보에 사용되는 CAboutDlg 대화 상자입니다.
+CTestServerGigaVisDlg* g_This;
+void SharedMmemoryCalbackFunc(int nType)
+{
+	switch (nType)
+	{
+	case 0:
+		g_This->WriteClient();
+		break;
+	}
+}
 
 class CAboutDlg : public CDialogEx
 {
@@ -53,13 +62,14 @@ END_MESSAGE_MAP()
 CTestServerGigaVisDlg::CTestServerGigaVisDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_TESTSERVER_GIGAVIS_DIALOG, pParent)
 	, m_Edit_strImagePath(_T(""))
-	, m_Edit_nThreadDelay0(0)
-	, m_Edit_nThreadDelay1(0)
+	, m_Edit_nThreadDelay0(1000)
+	, m_Edit_nThreadDelay1(1000)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	m_bServerEnd = FALSE;
 	m_Server = NULL;
 	m_Client = NULL;
+	m_nTestIdx = 1;
 }
 
 void CTestServerGigaVisDlg::DoDataExchange(CDataExchange* pDX)
@@ -76,6 +86,17 @@ BEGIN_MESSAGE_MAP(CTestServerGigaVisDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_BUTTON_SELECT_IMAGE_PATH, &CTestServerGigaVisDlg::OnBnClickedButtonSelectImagePath)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_DELAY_SET_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadDelaySet)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_START_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadStart)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_STOP_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadStop)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_PAUSE_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadPause)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_RESUME_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadResume)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_DELAY_SET_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadDelaySet)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_START_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadStart)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_STOP_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadStop)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_PAUSE_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadPause)
+	ON_BN_CLICKED(IDC_BUTTON_THREAD_RESUME_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadResume)
 END_MESSAGE_MAP()
 
 
@@ -111,11 +132,12 @@ BOOL CTestServerGigaVisDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 작은 아이콘을 설정합니다.
 
 	// TODO: 여기에 추가 초기화 작업을 추가합니다.
+	g_This = this;
 	AfxSocketInit();
 	m_Server = new CSeverSock;
 	BOOL chk;
 	chk = TRUE;
-	CString strTemp, packet;
+	CString strText, packet;
 	delete m_Server;
 	//서버 소켓을 만든다.
 	m_Server = new CSeverSock;
@@ -123,8 +145,8 @@ BOOL CTestServerGigaVisDlg::OnInitDialog()
 	if (!m_Server->Create(5000))
 	{
 		chk = FALSE;
-		strTemp.Format(_T("Error : TCP/IP server create fail!"));
-		AfxMessageBox(strTemp);
+		strText.Format(_T("Error : TCP/IP server create fail!"));
+		AfxMessageBox(strText);
 		return TRUE;
 	}
 
@@ -133,15 +155,32 @@ BOOL CTestServerGigaVisDlg::OnInitDialog()
 	if (!m_Server->Listen())
 	{
 		chk = FALSE;
-		strTemp.Format(_T("Error : TCP/IP server listen fail!"));
-		AfxMessageBox(strTemp);
+		strText.Format(_T("Error : TCP/IP server listen fail!"));
+		AfxMessageBox(strText);
 		return TRUE;
 	}
 
 	if (chk)
 	{
-		strTemp.Format(_T("TCP/IP server open OK!"));
+		strText.Format(_T("TCP/IP server open OK!"));
 	}
+
+
+	wchar_t strTemp[MAX_CHAR_LENG];
+	GetCurrentDirectory(MAX_CHAR_LENG, strTemp);
+	strText.Format(_T("%s\\Log\\Send\\"), strTemp);
+	m_SendLog = new CLogFile(strText, _T("Send.log"), &m_List_SendLog, _T("SendMessage"), 500, 50);
+
+	strText.Format(_T("%s\\Log\\Rcv\\"), strTemp);
+	m_RcvLog = new CLogFile(strText, _T("Rcv.log"), &m_List_RcvLog, _T("RcvMessage"), 500, 50);
+
+
+	m_SendImg = Mat(1544, 2064, CV_8UC3);
+
+
+	m_PushMem = new CSharedMemory();
+	m_PopMem = new CSharedMemory();
+
 
 	//m_Client = new CClientSock;
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
@@ -196,3 +235,404 @@ HCURSOR CTestServerGigaVisDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+
+
+BOOL CTestServerGigaVisDlg::DestroyWindow()
+{
+	// TODO: 여기에 특수화된 코드를 추가 및/또는 기본 클래스를 호출합니다.
+
+	if (m_SendLog != NULL)
+	{
+		delete m_SendLog;
+		m_SendLog = NULL;
+	}
+
+	if (m_RcvLog != NULL)
+	{
+		delete m_RcvLog;
+		m_RcvLog = NULL;
+	}
+
+	if (m_PushMem != NULL)
+	{
+		delete m_PushMem;
+		m_PushMem = NULL;
+	}
+
+	if (m_PopMem != NULL)
+	{
+		delete m_PopMem;
+		m_PopMem = NULL;
+	}
+
+	return CDialogEx::DestroyWindow();
+}
+
+int CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
+{
+	switch (uMsg) {
+		// 폴더선택 다이얼로그의 초기화가 끝난 경우
+	case BFFM_INITIALIZED:
+		SendMessage(hwnd, BFFM_SETSELECTION, TRUE, lpData);
+		break;
+	}
+	return 0;
+}
+
+void CTestServerGigaVisDlg::OnBnClickedButtonSelectImagePath()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	ITEMIDLIST* pidlBrowse;
+	WCHAR       pszPathname[MAX_PATH];
+
+	BROWSEINFO  BrInfo;
+	BrInfo.hwndOwner = GetSafeHwnd();
+	BrInfo.pidlRoot = NULL;
+
+	memset(&BrInfo, 0x00, sizeof(BrInfo));
+	BrInfo.pszDisplayName = pszPathname;
+	BrInfo.lpszTitle = _T("Select folder");
+	BrInfo.ulFlags = BIF_RETURNONLYFSDIRS;
+
+	// 이벤트에 대한 사용자정의 함수
+	BrInfo.lpfn = BrowseCallbackProc;
+
+	// 사용자정의 함수에 넘겨질 인자로 사용자가 설정하고자 하는 경로를 설정한다.
+	// 예를들어 초기폴더경로를 C드라이브로 설정하는 경우
+	wchar_t strTemp[MAX_CHAR_LENG];
+	GetCurrentDirectory(MAX_CHAR_LENG, strTemp);
+	CString strInitPath;
+	strInitPath.Format(_T("%s"), strTemp);
+	BrInfo.lParam = (LPARAM)strInitPath.GetBuffer();
+
+	pidlBrowse = ::SHBrowseForFolder(&BrInfo);
+	if (pidlBrowse != NULL)
+	{
+		// 선택된 폴더 경로얻음
+		SHGetPathFromIDList(pidlBrowse, pszPathname);
+
+		// 경로(pszPathname)를 이용하여 이후작업 추가
+		m_Edit_strImagePath.Format(_T("%s"), pszPathname);
+		UpdateData(FALSE);
+
+		//InitThread(0);
+		GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(FALSE);
+
+		//InitThread(1);
+		GetDlgItem(IDC_BUTTON_THREAD_START_2)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_2)->EnableWindow(FALSE);
+	}
+}
+
+void CTestServerGigaVisDlg::WriteClient()
+{
+	//memcpy(&m_SendImg, &m_PopMem.m_queImage.front(), sizeof(Mat));
+
+	if (m_PopMem->m_queImage.size() == 0)
+		return;
+
+	CString strPacket;
+	BYTE* byData, *byPacket;
+	
+
+	int nWidth, nHeight, nBpp;
+	nWidth = m_PopMem->m_queImage.front().cols;
+	nHeight = m_PopMem->m_queImage.front().rows;
+	nBpp = m_PopMem->m_queImage.front().channels();
+	int nImageSize = nWidth * nHeight * nBpp;
+	byData = new BYTE[nImageSize];
+	m_PopMem->SetCritcalSection(TRUE);
+	memcpy(byData, m_PopMem->m_queImage.front().data, nImageSize);
+	CStringA strTemp;
+	strTemp.Format(("%S\\rslt\\SendTest_%03d.bmp"), m_Edit_strImagePath, m_nTestIdx++);
+	//imwrite(strTemp.GetBuffer(), m_PopMem->m_queImage.front());
+	m_PopMem->SetCritcalSection(FALSE);
+	strPacket.Format(_T("%d,%d,%d"), 1544, 2064, 16);
+	
+	int nPacketLen = nImageSize + strPacket.GetLength() + 2 + 3;
+	byPacket = new BYTE[nPacketLen];
+
+	int nIdx = 0;
+	byPacket[nIdx++] = PACKET_CHAR_STX;
+	byPacket[nIdx++] = '1';
+	byPacket[nIdx++] = '5';
+	byPacket[nIdx++] = '4';
+	byPacket[nIdx++] = '4';
+	byPacket[nIdx++] = ',';
+	byPacket[nIdx++] = '2';
+	byPacket[nIdx++] = '0';
+	byPacket[nIdx++] = '6';
+	byPacket[nIdx++] = '4';
+	byPacket[nIdx++] = ',';
+	byPacket[nIdx++] = '3';
+	byPacket[nIdx++] = ',';
+
+	memcpy(&byPacket[nIdx], byData, sizeof(BYTE) * (nImageSize));
+
+
+	m_Server->Send(byPacket, nPacketLen);
+
+
+	delete[] byData;
+	delete[] byPacket;
+
+	m_PopMem->m_queImage.pop();
+
+	if(m_PushMem->m_queImage.size() > 0)
+		m_PushMem->m_queImage.pop();
+
+
+}
+
+BOOL CTestServerGigaVisDlg::SendCliendMessage(void* pData)
+{
+
+
+	return TRUE;
+}
+
+BOOL CTestServerGigaVisDlg::InitThread(int nIdx)
+{
+	BOOL rslt = TRUE;
+	switch (nIdx)
+	{
+	case 0:
+	{
+		m_PushMem->m_strReadImagePath.Format(_T("%s"), m_Edit_strImagePath);
+		m_pServerThread[0] = AfxBeginThread(Thread0, m_PushMem, THREAD_PRIORITY_NORMAL);
+		m_pServerThread[0]->m_bAutoDelete = FALSE;
+	}
+		break;
+	case 1:
+	{
+		m_PopMem->SetCallBack(SharedMmemoryCalbackFunc);
+		m_pServerThread[1] = AfxBeginThread(Thread1, m_PopMem, THREAD_PRIORITY_NORMAL);
+		m_pServerThread[1]->m_bAutoDelete = FALSE;
+		//m_PushMem.SharedMemoryPop();
+	}
+		break;
+	default:
+		rslt = FALSE;
+		break;
+	}
+
+	return rslt;
+}
+
+BOOL CTestServerGigaVisDlg::EndThread(int nIdx)
+{
+	BOOL rslt = TRUE;
+	if (m_pServerThread[nIdx] != NULL)
+	{
+		DWORD dwRet = 0;
+
+		if(nIdx == 0)
+			dwRet = WaitForSingleObject(m_pServerThread[nIdx]->m_hThread, m_Edit_nThreadDelay0);
+		else
+			dwRet = WaitForSingleObject(m_pServerThread[nIdx]->m_hThread, m_Edit_nThreadDelay1);
+
+		if (dwRet == WAIT_FAILED)
+		{
+			rslt = FALSE;
+		}
+		else if (dwRet == WAIT_ABANDONED)
+		{
+			rslt = FALSE;
+		}
+		else if (dwRet == WAIT_TIMEOUT)
+		{
+			rslt = FALSE;
+		}
+	}
+
+	if (rslt)
+	{
+		delete m_pServerThread[nIdx];
+		m_pServerThread[nIdx] = NULL;
+	}
+
+	return rslt;
+}
+
+UINT CTestServerGigaVisDlg::Thread0(LPVOID pParam)
+{
+	CSharedMemory* pPush = (CSharedMemory*)pParam;
+	while (TRUE)
+	{
+
+		pPush->SharedMemoryPush();
+
+
+		if (pPush->m_bThreadEnd)
+			break;
+
+		Sleep(pPush->m_nThreadDelayTime);
+	}
+
+	pPush->m_queImage.empty();
+
+	return 0;
+}
+
+UINT CTestServerGigaVisDlg::Thread1(LPVOID pParam)
+{
+	CSharedMemory* pPop = (CSharedMemory*)pParam;
+	while (TRUE)
+	{
+
+		if (pPop->SharedMemoryPop())
+
+
+		if (pPop->m_bThreadEnd)
+			break;
+
+		Sleep(pPop->m_nThreadDelayTime);
+	}
+	pPop->m_queImage.empty();
+
+	return 0;
+}
+
+void CTestServerGigaVisDlg::OnBnClickedButtonThreadDelaySet()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	int nId = GetFocus()->GetDlgCtrlID();
+	int nThreadIdx = 0;
+	if (nId == IDC_BUTTON_THREAD_DELAY_SET_2)
+		nThreadIdx = 1;
+
+	UpdateData(TRUE);
+	switch (nThreadIdx)
+	{
+	case 0:
+		m_PushMem->m_nThreadDelayTime = m_Edit_nThreadDelay0;
+		break;
+	case 1:
+		m_PopMem->m_nThreadDelayTime = m_Edit_nThreadDelay1;
+		break;
+	}
+
+}
+
+
+void CTestServerGigaVisDlg::OnBnClickedButtonThreadStart()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	int nId = GetFocus()->GetDlgCtrlID();
+	int nThreadIdx = 0;
+	if (nId == IDC_BUTTON_THREAD_START_2)
+		nThreadIdx = 1;
+
+	switch (nThreadIdx)
+	{
+	case 0:
+		m_PushMem->m_bThreadEnd = FALSE;
+		GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(FALSE);
+		break;
+	case 1:
+		m_PopMem->m_bThreadEnd = FALSE;
+		GetDlgItem(IDC_BUTTON_THREAD_START_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_2)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_2)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_2)->EnableWindow(FALSE);
+		break;
+	}
+
+	InitThread(nThreadIdx);
+}
+
+
+void CTestServerGigaVisDlg::OnBnClickedButtonThreadStop()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	int nId = GetFocus()->GetDlgCtrlID();
+	int nThreadIdx = 0;
+	if (nId == IDC_BUTTON_THREAD_STOP_2)
+		nThreadIdx = 1;
+
+
+	switch (nThreadIdx)
+	{
+	case 0:
+		m_PushMem->m_bThreadEnd = TRUE;
+		GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(FALSE);
+		break;
+	case 1:
+		m_PopMem->m_bThreadEnd = TRUE;
+		GetDlgItem(IDC_BUTTON_THREAD_START_2)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_2)->EnableWindow(FALSE);
+		break;
+	}
+
+
+	EndThread(nThreadIdx);
+}
+
+
+void CTestServerGigaVisDlg::OnBnClickedButtonThreadPause()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	int nId = GetFocus()->GetDlgCtrlID();
+	int nThreadIdx = 0;
+	if (nId == IDC_BUTTON_THREAD_PAUSE_2)
+		nThreadIdx = 1;
+
+	switch (nThreadIdx)
+	{
+	case 0:
+		GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(TRUE);
+		break;
+	case 1:
+		GetDlgItem(IDC_BUTTON_THREAD_START_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_2)->EnableWindow(TRUE);
+		break;
+	}
+
+	m_pServerThread[nThreadIdx]->SuspendThread();
+}
+
+
+void CTestServerGigaVisDlg::OnBnClickedButtonThreadResume()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	int nId = GetFocus()->GetDlgCtrlID();
+	int nThreadIdx = 0;
+	if (nId == IDC_BUTTON_THREAD_RESUME_2)
+		nThreadIdx = 1;
+
+	switch (nThreadIdx)
+	{
+	case 0:
+		GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(FALSE);
+		break;
+	case 1:
+		GetDlgItem(IDC_BUTTON_THREAD_START_2)->EnableWindow(FALSE);
+		GetDlgItem(IDC_BUTTON_THREAD_STOP_2)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_PAUSE_2)->EnableWindow(TRUE);
+		GetDlgItem(IDC_BUTTON_THREAD_RESUME_2)->EnableWindow(FALSE);
+		break;
+	}
+
+	m_pServerThread[nThreadIdx]->ResumeThread();
+}

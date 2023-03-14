@@ -4,6 +4,10 @@
 
 #pragma once
 #include "sversok.h"
+#include "logFile.h"
+#include "CSharedMemory.h"
+
+#define MAX_CHAR_LENG			1024
 
 // CTestServerGigaVisDlg 대화 상자
 class CTestServerGigaVisDlg : public CDialogEx
@@ -24,11 +28,27 @@ protected:
 	CSeverSock* m_Server;
 	CClientSock* m_Client;
 	BOOL m_bServerEnd;
+	CLogFile* m_SendLog;
+	CLogFile* m_RcvLog;
+
+	CWinThread* m_pServerThread[2];
+	UINT static Thread0(LPVOID pParam);
+	UINT static Thread1(LPVOID pParam);
+
+
+	CSharedMemory *m_PushMem;
+	CSharedMemory *m_PopMem;
+
+	Mat m_SendImg;
+
+
+	int m_nTestIdx;
 private:
 	BOOL SendCliendMessage(void* pData);
-
+	BOOL InitThread(int nIdx);
+	BOOL EndThread(int nIdx);
 public:
-
+	void WriteClient();
 
 
 
@@ -48,4 +68,11 @@ public:
 	CString m_Edit_strImagePath;
 	int m_Edit_nThreadDelay0;
 	int m_Edit_nThreadDelay1;
+	virtual BOOL DestroyWindow();
+	afx_msg void OnBnClickedButtonSelectImagePath();
+	afx_msg void OnBnClickedButtonThreadDelaySet();
+	afx_msg void OnBnClickedButtonThreadStart();
+	afx_msg void OnBnClickedButtonThreadStop();
+	afx_msg void OnBnClickedButtonThreadPause();
+	afx_msg void OnBnClickedButtonThreadResume();
 };

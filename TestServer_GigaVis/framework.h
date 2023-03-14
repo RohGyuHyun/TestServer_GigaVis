@@ -34,7 +34,7 @@
 
 #include "opencv2/opencv.hpp"
 using namespace cv;
-
+#include "NghUtil.h"
 
 #ifdef _UNICODE
 #if defined _M_IX86
