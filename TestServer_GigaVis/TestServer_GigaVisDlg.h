@@ -49,7 +49,7 @@ private:
 	BOOL EndThread(int nIdx);
 public:
 	void WriteClient();
-
+	void ReadStop();
 
 
 // 구현입니다.
@@ -69,6 +69,9 @@ public:
 	int m_Edit_nThreadDelay0;
 	int m_Edit_nThreadDelay1;
 	virtual BOOL DestroyWindow();
+	afx_msg LRESULT OnAccept(WPARAM, LPARAM);
+	afx_msg LRESULT OnClose(WPARAM, LPARAM);
+	afx_msg LRESULT OnReceive(WPARAM, LPARAM);
 	afx_msg void OnBnClickedButtonSelectImagePath();
 	afx_msg void OnBnClickedButtonThreadDelaySet();
 	afx_msg void OnBnClickedButtonThreadStart();

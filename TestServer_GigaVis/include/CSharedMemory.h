@@ -37,6 +37,7 @@ public:
 	CSharedMemory();
 	~CSharedMemory();
 
+	BOOL m_bFirst;
 	HANDLE m_hHandle;
 	queue<Mat> m_queImage;
 	BOOL m_bThreadEnd;

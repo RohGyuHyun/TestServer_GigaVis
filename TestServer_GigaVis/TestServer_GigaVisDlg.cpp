@@ -21,6 +21,9 @@ void SharedMmemoryCalbackFunc(int nType)
 	case 0:
 		g_This->WriteClient();
 		break;
+	case 1:
+		g_This->ReadStop();
+		break;
 	}
 }
 
@@ -86,6 +89,9 @@ BEGIN_MESSAGE_MAP(CTestServerGigaVisDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_MESSAGE(WM_ACCEPT_SOCKET, OnAccept)
+	ON_MESSAGE(WM_RECEIVE_DATA, OnReceive)
+	ON_MESSAGE(WM_CLOSE_SOCK, OnClose)
 	ON_BN_CLICKED(IDC_BUTTON_SELECT_IMAGE_PATH, &CTestServerGigaVisDlg::OnBnClickedButtonSelectImagePath)
 	ON_BN_CLICKED(IDC_BUTTON_THREAD_DELAY_SET_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadDelaySet)
 	ON_BN_CLICKED(IDC_BUTTON_THREAD_START_1, &CTestServerGigaVisDlg::OnBnClickedButtonThreadStart)
@@ -373,9 +379,16 @@ void CTestServerGigaVisDlg::WriteClient()
 	byPacket[nIdx++] = ',';
 
 	memcpy(&byPacket[nIdx], byData, sizeof(BYTE) * (nImageSize));
+	byPacket[nPacketLen - 1] = PACKET_CHAR_ETX;
 
+	int nRslt = m_Client->Send(byPacket, nPacketLen);
 
-	m_Server->Send(byPacket, nPacketLen);
+	CString strText, strTemp2;
+	for (int i = 0; i < 20; i++)
+		strText.AppendFormat(_T("%C"), byPacket[i]);
+	
+	
+	m_SendLog->WriteText(strText, TRUE);
 
 
 	delete[] byData;
@@ -403,7 +416,9 @@ BOOL CTestServerGigaVisDlg::InitThread(int nIdx)
 	{
 	case 0:
 	{
+		m_PushMem->m_bFirst = FALSE;
 		m_PushMem->m_strReadImagePath.Format(_T("%s"), m_Edit_strImagePath);
+		m_PushMem->SetCallBack(SharedMmemoryCalbackFunc);
 		m_pServerThread[0] = AfxBeginThread(Thread0, m_PushMem, THREAD_PRIORITY_NORMAL);
 		m_pServerThread[0]->m_bAutoDelete = FALSE;
 	}
@@ -549,6 +564,15 @@ void CTestServerGigaVisDlg::OnBnClickedButtonThreadStart()
 	InitThread(nThreadIdx);
 }
 
+void CTestServerGigaVisDlg::ReadStop()
+{
+	m_PushMem->m_bThreadEnd = TRUE;
+	GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(TRUE);
+	GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(FALSE);
+	GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(FALSE);
+	GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(FALSE);
+	EndThread(0);
+}
 
 void CTestServerGigaVisDlg::OnBnClickedButtonThreadStop()
 {
@@ -635,4 +659,78 @@ void CTestServerGigaVisDlg::OnBnClickedButtonThreadResume()
 	}
 
 	m_pServerThread[nThreadIdx]->ResumeThread();
+}
+
+LRESULT CTestServerGigaVisDlg::OnAccept(WPARAM wParam, LPARAM lParam)
+{
+	//새로운 클라이언트와 연결할 소켓을 만들고
+
+	m_Client = new CClientSock;
+
+	//서버 소켓으로부터 현재 연결된 소켓을
+	//받는다.
+	m_Client = m_Server->GetAcceptSocket();
+
+	//hwnd설정
+	m_Client->SetWnd(this->m_hWnd);
+
+	return TRUE;
+}
+
+LRESULT CTestServerGigaVisDlg::OnClose(WPARAM wParam, LPARAM lParam)
+{
+	//접속 중인 클라이언트가 해제 되면 메시지 출력
+	//기존 서버 소켓을 닫는다.
+	m_Server->Close();
+	//delete m_Client;
+	delete m_Server;
+
+	AfxSocketInit();
+	m_Server = new CSeverSock;
+	BOOL chk;
+	chk = TRUE;
+	CString strText, packet;
+	delete m_Server;
+	//서버 소켓을 만든다.
+	m_Server = new CSeverSock;
+	AfxSocketInit();
+	if (!m_Server->Create(5000))
+	{
+		chk = FALSE;
+		strText.Format(_T("Error : TCP/IP server create fail!"));
+		AfxMessageBox(strText);
+		return TRUE;
+	}
+
+	m_Server->SetWnd(this->m_hWnd);
+	//클라이언트가 오기를 기다린다.
+	if (!m_Server->Listen())
+	{
+		chk = FALSE;
+		strText.Format(_T("Error : TCP/IP server listen fail!"));
+		AfxMessageBox(strText);
+		return TRUE;
+	}
+
+	if (chk)
+	{
+		strText.Format(_T("TCP/IP server open OK!"));
+	}
+
+	return TRUE;
+}
+
+LRESULT CTestServerGigaVisDlg::OnReceive(WPARAM wParam, LPARAM lParam)
+{
+	char temp[PACKET_MAX_NUM];
+	memset(temp, NULL, PACKET_MAX_NUM);
+	int nRcvLen = m_Client->Receive((LPSTR)temp, PACKET_MAX_NUM);
+
+	CString strText;
+	for (int i = 0; i < nRcvLen; i++)
+		strText.AppendFormat(_T("%C"), temp[i]);
+	
+	m_RcvLog->WriteText(strText, TRUE);
+
+	return TRUE;
 }

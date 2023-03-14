@@ -13,7 +13,9 @@ BOOL CSharedMemoryPush::SharedMemoryPush()
 		GetFolderInFileName(m_strReadImagePath, &m_strReadFilePath);
 
 	if (m_strReadFilePath.size() == 0)
+	{
 		return FALSE;
+	}
 
 	CStringA strFilePath;
 	strFilePath.Format("%S\\%S", m_strReadImagePath, m_strReadFilePath.front());
@@ -88,7 +90,7 @@ CSharedMemoryPush::~CSharedMemoryPush()
 
 CSharedMemoryPop::CSharedMemoryPop()
 {
-	m_PopImg = Mat(1544, 2064, CV_8UC3);
+	m_PopImg.create(1544, 2064, CV_8UC3);
 }
 
 CSharedMemoryPop::~CSharedMemoryPop()
@@ -121,6 +123,8 @@ BOOL CSharedMemoryPop::SharedMemoryPop()
 
 	if (NULL != m_piMemory)
 	{
+		//Ma/t img;
+		//img.create(1544, 2064, CV_8UC3);
 		memcpy(&m_PopImg, m_piMemory, sizeof(Mat));
 		if (m_PopImg.rows != NULL)
 		{
@@ -157,7 +161,7 @@ BOOL CSharedMemoryPop::SharedMemoryPop()
 CSharedMemory::CSharedMemory()
 {
 	g_MainClass = this;
-
+	m_bFirst = FALSE;
 	m_hHandle = NULL;
 	m_bThreadEnd = FALSE;
 	m_nThreadDelayTime = 1000;
@@ -185,6 +189,9 @@ CSharedMemory::~CSharedMemory()
 			AfxMessageBox(_T("Close Error"));
 		}
 	}
+
+	if (m_queImage.size() > 0)
+		m_queImage.empty();
 }
 
 void CSharedMemory::SetCritcalSection(BOOL isSet)
