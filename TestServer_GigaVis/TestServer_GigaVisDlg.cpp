@@ -103,6 +103,7 @@ BEGIN_MESSAGE_MAP(CTestServerGigaVisDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_THREAD_STOP_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadStop)
 	ON_BN_CLICKED(IDC_BUTTON_THREAD_PAUSE_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadPause)
 	ON_BN_CLICKED(IDC_BUTTON_THREAD_RESUME_2, &CTestServerGigaVisDlg::OnBnClickedButtonThreadResume)
+	ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
@@ -175,10 +176,10 @@ BOOL CTestServerGigaVisDlg::OnInitDialog()
 	wchar_t strTemp[MAX_CHAR_LENG];
 	GetCurrentDirectory(MAX_CHAR_LENG, strTemp);
 	strText.Format(_T("%s\\Log\\Send\\"), strTemp);
-	m_SendLog = new CLogFile(strText, _T("Send.log"), &m_List_SendLog, _T("SendMessage"), 500, 50);
+	m_SendLog = new CLogFile(strText, _T("Send.log"), &m_List_SendLog, _T("SendMessage"), 500, 50, TRUE);
 
 	strText.Format(_T("%s\\Log\\Rcv\\"), strTemp);
-	m_RcvLog = new CLogFile(strText, _T("Rcv.log"), &m_List_RcvLog, _T("RcvMessage"), 500, 50);
+	m_RcvLog = new CLogFile(strText, _T("Rcv.log"), &m_List_RcvLog, _T("RcvMessage"), 500, 50, TRUE);
 
 
 	m_SendImg = Mat(1544, 2064, CV_8UC3);
@@ -187,6 +188,8 @@ BOOL CTestServerGigaVisDlg::OnInitDialog()
 	m_PushMem = new CSharedMemory();
 	m_PopMem = new CSharedMemory();
 
+	m_PushMem->SetCritcalSection(&m_Critcal);
+	m_PopMem->SetCritcalSection(&m_Critcal);
 
 	//m_Client = new CClientSock;
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
@@ -361,6 +364,10 @@ void CTestServerGigaVisDlg::WriteClient()
 	strPacket.Format(_T("%d,%d,%d"), 1544, 2064, 16);
 	
 	int nPacketLen = nImageSize + strPacket.GetLength() + 2 + 3;
+	CStringA strTemp2;
+	strTemp2.Format((",%d,"), nPacketLen);
+	nPacketLen += strTemp2.GetLength() + 1;
+	strTemp2.Format((",%d,"), nPacketLen);
 	byPacket = new BYTE[nPacketLen];
 
 	int nIdx = 0;
@@ -376,15 +383,26 @@ void CTestServerGigaVisDlg::WriteClient()
 	byPacket[nIdx++] = '4';
 	byPacket[nIdx++] = ',';
 	byPacket[nIdx++] = '3';
-	byPacket[nIdx++] = ',';
 
-	memcpy(&byPacket[nIdx], byData, sizeof(BYTE) * (nImageSize));
+	int nStartIdx = nIdx;
+	nIdx = 0;
+	for (int i = 0; i < strTemp2.GetLength(); i++)
+	{
+		byPacket[i + nStartIdx] = strTemp2.GetBuffer()[nIdx++];
+	}
+	memcpy(&byPacket[nStartIdx + nIdx], byData, sizeof(BYTE) * (nImageSize));
+
+	
+
 	byPacket[nPacketLen - 1] = PACKET_CHAR_ETX;
 
-	int nRslt = m_Client->Send(byPacket, nPacketLen);
 
-	CString strText, strTemp2;
-	for (int i = 0; i < 20; i++)
+	int nRslt = 0;
+	if(m_Client != NULL)
+		nRslt = m_Client->Send(byPacket, nPacketLen);
+
+	CString strText;
+	for (int i = 0; i < 26; i++)
 		strText.AppendFormat(_T("%C"), byPacket[i]);
 	
 	
@@ -396,8 +414,8 @@ void CTestServerGigaVisDlg::WriteClient()
 
 	m_PopMem->m_queImage.pop();
 
-	if(m_PushMem->m_queImage.size() > 0)
-		m_PushMem->m_queImage.pop();
+	//if(m_PushMem->m_queImage.size() > 0)
+		//m_PushMem->m_queImage.pop();
 
 
 }
@@ -412,23 +430,28 @@ BOOL CTestServerGigaVisDlg::SendCliendMessage(void* pData)
 BOOL CTestServerGigaVisDlg::InitThread(int nIdx)
 {
 	BOOL rslt = TRUE;
+	EndThread(nIdx);
 	switch (nIdx)
 	{
 	case 0:
 	{
-		m_PushMem->m_bFirst = FALSE;
+		m_PushMem->CSharedMemoryPush::ReleasQue();
+		m_PushMem->m_nPushIdx = 0;
 		m_PushMem->m_strReadImagePath.Format(_T("%s"), m_Edit_strImagePath);
 		m_PushMem->SetCallBack(SharedMmemoryCalbackFunc);
 		m_pServerThread[0] = AfxBeginThread(Thread0, m_PushMem, THREAD_PRIORITY_NORMAL);
 		m_pServerThread[0]->m_bAutoDelete = FALSE;
+		SetTimer(0, 100, NULL);
 	}
 		break;
 	case 1:
 	{
+		m_PopMem->m_nPopIdx = 0;
+		m_PopMem->m_bSendReady = TRUE;
 		m_PopMem->SetCallBack(SharedMmemoryCalbackFunc);
 		m_pServerThread[1] = AfxBeginThread(Thread1, m_PopMem, THREAD_PRIORITY_NORMAL);
 		m_pServerThread[1]->m_bAutoDelete = FALSE;
-		//m_PushMem.SharedMemoryPop();
+		SetTimer(1, 100, NULL);
 	}
 		break;
 	default:
@@ -479,17 +502,20 @@ UINT CTestServerGigaVisDlg::Thread0(LPVOID pParam)
 	CSharedMemory* pPush = (CSharedMemory*)pParam;
 	while (TRUE)
 	{
-
+		pPush->SetCritcalSection(TRUE);
 		pPush->SharedMemoryPush();
-
+		pPush->SetCritcalSection(FALSE);
+		if (pPush->m_strReadFilePath.size() == 0)
+		{
+			pPush->m_bThreadEnd = TRUE;
+			break;
+		}
 
 		if (pPush->m_bThreadEnd)
 			break;
 
 		Sleep(pPush->m_nThreadDelayTime);
 	}
-
-	pPush->m_queImage.empty();
 
 	return 0;
 }
@@ -499,16 +525,24 @@ UINT CTestServerGigaVisDlg::Thread1(LPVOID pParam)
 	CSharedMemory* pPop = (CSharedMemory*)pParam;
 	while (TRUE)
 	{
-
-		if (pPop->SharedMemoryPop())
-
+		pPop->SetCritcalSection(TRUE);
+		if (pPop->m_bSendReady)
+		{
+			pPop->m_bSendReady = FALSE;
+			pPop->SharedMemoryPop();
+		}
+		pPop->SetCritcalSection(FALSE);
+		if (pPop->m_queImage.size() == 0)
+		{
+			pPop->m_bThreadEnd = TRUE;
+			break;
+		}
 
 		if (pPop->m_bThreadEnd)
 			break;
 
 		Sleep(pPop->m_nThreadDelayTime);
 	}
-	pPop->m_queImage.empty();
 
 	return 0;
 }
@@ -722,9 +756,9 @@ LRESULT CTestServerGigaVisDlg::OnClose(WPARAM wParam, LPARAM lParam)
 
 LRESULT CTestServerGigaVisDlg::OnReceive(WPARAM wParam, LPARAM lParam)
 {
-	char temp[PACKET_MAX_NUM];
+	BYTE temp[PACKET_MAX_NUM];
 	memset(temp, NULL, PACKET_MAX_NUM);
-	int nRcvLen = m_Client->Receive((LPSTR)temp, PACKET_MAX_NUM);
+	int nRcvLen = m_Client->Receive(temp, PACKET_MAX_NUM);
 
 	CString strText;
 	for (int i = 0; i < nRcvLen; i++)
@@ -732,5 +766,39 @@ LRESULT CTestServerGigaVisDlg::OnReceive(WPARAM wParam, LPARAM lParam)
 	
 	m_RcvLog->WriteText(strText, TRUE);
 
+	m_PopMem->m_bSendReady = TRUE;
+
 	return TRUE;
+}
+
+void CTestServerGigaVisDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+
+	switch ((int)nIDEvent)
+	{
+	case 0:
+		if (m_PushMem->m_bThreadEnd)
+		{
+			KillTimer(0);
+			GetDlgItem(IDC_BUTTON_THREAD_START_1)->EnableWindow(TRUE);
+			GetDlgItem(IDC_BUTTON_THREAD_STOP_1)->EnableWindow(FALSE);
+			GetDlgItem(IDC_BUTTON_THREAD_PAUSE_1)->EnableWindow(FALSE);
+			GetDlgItem(IDC_BUTTON_THREAD_RESUME_1)->EnableWindow(FALSE);
+		}
+		break;
+	case 1:
+		if (m_PopMem->m_bThreadEnd)
+		{
+			KillTimer(1);
+			GetDlgItem(IDC_BUTTON_THREAD_START_2)->EnableWindow(TRUE);
+			GetDlgItem(IDC_BUTTON_THREAD_STOP_2)->EnableWindow(FALSE);
+			GetDlgItem(IDC_BUTTON_THREAD_PAUSE_2)->EnableWindow(FALSE);
+			GetDlgItem(IDC_BUTTON_THREAD_RESUME_2)->EnableWindow(FALSE);
+		}
+		break;
+		break;
+	}
+
+	CDialogEx::OnTimer(nIDEvent);
 }

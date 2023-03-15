@@ -41,6 +41,7 @@ protected:
 
 	Mat m_SendImg;
 
+	CCriticalSection m_Critcal;
 
 	int m_nTestIdx;
 private:
@@ -78,4 +79,5 @@ public:
 	afx_msg void OnBnClickedButtonThreadStop();
 	afx_msg void OnBnClickedButtonThreadPause();
 	afx_msg void OnBnClickedButtonThreadResume();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 };
