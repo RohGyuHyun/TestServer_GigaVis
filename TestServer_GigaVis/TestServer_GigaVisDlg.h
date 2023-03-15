@@ -36,8 +36,8 @@ protected:
 	UINT static Thread1(LPVOID pParam);
 
 
-	CSharedMemory *m_PushMem;
-	CSharedMemory *m_PopMem;
+	CSharedMemoryPush *m_PushMem;
+	CSharedMemoryPop *m_PopMem;
 
 	Mat m_SendImg;
 
@@ -50,7 +50,7 @@ private:
 	BOOL EndThread(int nIdx);
 public:
 	void WriteClient();
-	void ReadStop();
+	void SetMaxReadCount(int nMaxCount);
 
 
 // 구현입니다.

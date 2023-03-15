@@ -2,15 +2,18 @@
 #include "CSharedMemory.h"
 #include <iostream>
 
-CSharedMemory* g_MainClass;
+//CSharedMemory* g_MainClass;
 #define SHARED_NAME			_T("Global/IMAGE_DATA_SHARED")
 
 BOOL CSharedMemoryPush::SharedMemoryPush()
 {
 	BOOL rslt = TRUE;
 
-	if(m_strReadFilePath.size() == 0)
+	if (m_strReadFilePath.size() == 0)
+	{
 		GetFolderInFileName(m_strReadImagePath, &m_strReadFilePath);
+		callEventfunc(1, m_strReadFilePath.size());
+	}
 
 	if (m_strReadFilePath.size() == 0)
 	{
@@ -22,80 +25,26 @@ BOOL CSharedMemoryPush::SharedMemoryPush()
 
 	Mat img;
 	img = cv::imread(strFilePath.GetBuffer());
-	g_MainClass->m_queImage.push(img);
+	m_queImage.push(img);
 
-	DWORD dwSize = sizeof(img) * 20;
-	HANDLE hFile = CreateFile(TEXT(".\\MMF.dat"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	
-	if (NULL != hFile)
-	{
-		m_hHandle = ::CreateFileMapping(hFile, NULL, PAGE_READWRITE, 0, /*sizeof(img)*/dwSize, SHARED_NAME);
-		if (NULL == m_hHandle)
-			AfxMessageBox(_T("Create Error"));
-	}
-
-	if (NULL == m_hHandle)
-	{
-		m_hHandle = ::OpenFileMapping(FILE_MAP_ALL_ACCESS, NULL, SHARED_NAME);
-
-		if (NULL == m_hHandle)
-		{
-			AfxMessageBox(_T("Open Error"));
-		}
-	}
-
-	if (NULL != m_hHandle)
-	{
-		m_piMemory = (int*)::MapViewOfFile(m_hHandle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
-		if (NULL == m_piMemory)
-		{
-			AfxMessageBox(_T("Open Error"));
-		}
-	}
 
 	if (m_nPushIdx > 10)
 		m_nPushIdx = 0;
-	DWORD dwStartAddr = sizeof(img)* m_nPushIdx + 20;
-	*m_piMemory += dwStartAddr;
+	DWORD dwStartAddr = sizeof(img) * m_nPushIdx;
+	m_piMemory += dwStartAddr;
 
 	if (NULL != m_piMemory)
 	{
 		if (img.rows > 0)
 		{
-			memcpy(m_piMemory, &g_MainClass->m_queImage.front(), sizeof(g_MainClass->m_queImage.front()));
+			memcpy(m_piMemory, &m_queImage.back(), sizeof(m_queImage.back()));
 		}
 	}
 	else
 	{
 		AfxMessageBox(_T("MapView is NULL"));
 	}
-
-	if (NULL != m_piMemory)
-	{
-		BOOL bUnMap = ::UnmapViewOfFile(m_piMemory);
-		if (bUnMap)
-		{
-			m_piMemory = NULL;
-		}
-		else
-		{
-			AfxMessageBox(_T("Unmap Error"));
-		}
-	}
-
-	if (NULL != m_hHandle)
-	{
-		BOOL bClose = ::CloseHandle(m_hHandle);
-		if (bClose)
-		{
-			m_hHandle = NULL;
-		}
-		else
-		{
-			AfxMessageBox(_T("Close Error"));
-		}
-	}
-	CloseHandle(hFile);
+	
 	if (m_strReadFilePath.size() > 0)
 	{
 		m_strReadFilePath.pop();
@@ -107,12 +56,12 @@ BOOL CSharedMemoryPush::SharedMemoryPush()
 
 void CSharedMemoryPush::ReleasQue()
 {
-	if (g_MainClass->m_queImage.size() > 0)
+	if (m_queImage.size() > 0)
 	{
 		while (TRUE)
 		{
-			g_MainClass->m_queImage.pop();
-			if (g_MainClass->m_queImage.size() == 0)
+			m_queImage.pop();
+			if (m_queImage.size() == 0)
 				break;
 		}
 	}
@@ -120,106 +69,19 @@ void CSharedMemoryPush::ReleasQue()
 
 CSharedMemoryPush::CSharedMemoryPush()
 {
-	m_nPushIdx = 0;
-	//Mat img = Mat(1544, 2064, CV_8UC3);
-	//DWORD dwSize = 1544 * 2064 * 3;
-	//HANDLE hFile = CreateFile(TEXT(".\\MMF.dat"), GENERIC_READ | GENERIC_WRITE,	0, NULL, CREATE_ALWAYS,	FILE_ATTRIBUTE_NORMAL, NULL);
-
-	//if (NULL != hFile)
-	//{
-	//	m_hHandle = ::CreateFileMapping(hFile, NULL, PAGE_READWRITE, 0, /*sizeof(img)*/dwSize * 10, SHARED_NAME);
-	//	if (NULL == m_hHandle)
-	//		AfxMessageBox(_T("Create Error"));
-	//}
-
-	//if (NULL == m_hHandle)
-	//{
-	//	m_hHandle = ::OpenFileMapping(FILE_MAP_ALL_ACCESS, NULL, SHARED_NAME);
-
-	//	if (NULL == m_hHandle)
-	//	{
-	//		AfxMessageBox(_T("Open Error"));
-	//	}
-	//}
-
-	//if (NULL != m_hHandle)
-	//{
-	//	m_piMemory = (int*)::MapViewOfFile(m_hHandle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
-	//	if (NULL == m_piMemory)
-	//	{
-	//		AfxMessageBox(_T("Open Error"));
-	//	}
-	//}
-}
-
-CSharedMemoryPush::~CSharedMemoryPush()
-{
-	/*if (NULL != m_piMemory)
-	{
-		BOOL bUnMap = ::UnmapViewOfFile(m_piMemory);
-		if (bUnMap)
-		{
-			m_piMemory = NULL;
-		}
-		else
-		{
-			AfxMessageBox(_T("Unmap Error"));
-		}
-	}
-
-	if (NULL != m_hHandle)
-	{
-		BOOL bClose = ::CloseHandle(m_hHandle);
-		if (bClose)
-		{
-			m_hHandle = NULL;
-		}
-		else
-		{
-			AfxMessageBox(_T("Close Error"));
-		}
-	}*/
-
-	ReleasQue();
-}
-
-CSharedMemoryPop::CSharedMemoryPop()
-{
-	m_nPopIdx = 0;
-	m_PopImg.create(1544, 2064, CV_8UC3);
-}
-
-CSharedMemoryPop::~CSharedMemoryPop()
-{
-	ReleasQue();
-}
-
-void CSharedMemoryPop::ReleasQue()
-{
-	if (g_MainClass->m_queImage.size() > 0)
-	{
-		while (TRUE)
-		{
-			g_MainClass->m_queImage.pop();
-			if (g_MainClass->m_queImage.size() == 0)
-				break;
-		}
-	}
-}
-
-BOOL CSharedMemoryPop::SharedMemoryPop()
-{
-	BOOL rslt = TRUE;
-	DWORD dwSize = sizeof(Mat) * 20;
 	m_hHandle = NULL;
+	m_bThreadEnd = FALSE;
+	m_nThreadDelayTime = 1000;
+	m_nPushIdx = 0;
+	DWORD dwSize = 1024000;
+	HANDLE hFile = CreateFile(TEXT(".\\MMF.dat"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	//if (NULL != hFile)
 	{
-		m_hHandle = ::CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, /*sizeof(img)*/dwSize, SHARED_NAME);
+		m_hHandle = ::CreateFileMapping(hFile/*INVALID_HANDLE_VALUE*/, NULL, PAGE_READWRITE, 0, /*sizeof(img)*/dwSize, SHARED_NAME);
 		if (NULL == m_hHandle)
 			AfxMessageBox(_T("Create Error"));
 	}
-
 
 	if (NULL == m_hHandle)
 	{
@@ -234,34 +96,17 @@ BOOL CSharedMemoryPop::SharedMemoryPop()
 	if (NULL != m_hHandle)
 	{
 		m_piMemory = (int*)::MapViewOfFile(m_hHandle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+		m_piFirstMemory = m_piMemory;
 		if (NULL == m_piMemory)
 		{
 			AfxMessageBox(_T("Open Error"));
 		}
 	}
+	//CloseHandle(hFile);
+}
 
-	if (m_nPopIdx > 10)
-		m_nPopIdx = 0;
-	DWORD dwStartAddr = sizeof(m_PopImg) * m_nPopIdx + 20;
-	*m_piMemory += dwStartAddr;
-
-	if (NULL != m_piMemory)
-	{
-		//Ma/t img;
-		//img.create(1544, 2064, CV_8UC3);
-		memcpy(&m_PopImg, m_piMemory, sizeof(Mat));
-		if (m_PopImg.rows != NULL)
-		{
-			g_MainClass->SetCritcalSection(TRUE);
-			g_MainClass->m_queImage.push(m_PopImg);
-			g_MainClass->SetCritcalSection(FALSE);
-		}
-	}
-	else
-	{
-		AfxMessageBox(_T("MapView is NULL"));
-	}
-
+CSharedMemoryPush::~CSharedMemoryPush()
+{
 	if (NULL != m_piMemory)
 	{
 		BOOL bUnMap = ::UnmapViewOfFile(m_piMemory);
@@ -288,25 +133,55 @@ BOOL CSharedMemoryPop::SharedMemoryPop()
 		}
 	}
 
-	if (g_MainClass->m_queImage.size() > 0)
-	{
-		g_MainClass->callEventfunc(0);
-		m_nPopIdx++;
-	}
 
-	return rslt;
+	ReleasQue();
 }
 
-
-CSharedMemory::CSharedMemory()
+CSharedMemoryPop::CSharedMemoryPop()
 {
-	g_MainClass = this;
+	m_nMaxSendCount = 0;
 	m_hHandle = NULL;
 	m_bThreadEnd = FALSE;
 	m_nThreadDelayTime = 1000;
+	m_nPopIdx = 0;
+	m_PopImg.create(1544, 2064, CV_8UC3);
+	m_hHandle = NULL;
+	if (NULL == m_hHandle)
+	{
+		m_hHandle = ::OpenFileMapping(PAGE_READONLY, NULL, SHARED_NAME);
+
+		if (NULL == m_hHandle)
+		{
+			AfxMessageBox(_T("Open Error"));
+		}
+	}
+
+	if (NULL != m_hHandle)
+	{
+		m_piMemory = (int*)::MapViewOfFile(m_hHandle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+		m_piFirstMemory = m_piMemory;
+		if (NULL == m_piMemory)
+		{
+			AfxMessageBox(_T("Open Error"));
+		}
+	}
 }
-CSharedMemory::~CSharedMemory()
+
+CSharedMemoryPop::~CSharedMemoryPop()
 {
+	if (NULL != m_piMemory)
+	{
+		BOOL bUnMap = ::UnmapViewOfFile(m_piMemory);
+		if (bUnMap)
+		{
+			m_piMemory = NULL;
+		}
+		else
+		{
+			AfxMessageBox(_T("Unmap Error"));
+		}
+	}
+
 	if (NULL != m_hHandle)
 	{
 		BOOL bClose = ::CloseHandle(m_hHandle);
@@ -320,6 +195,11 @@ CSharedMemory::~CSharedMemory()
 		}
 	}
 
+	ReleasQue();
+}
+
+void CSharedMemoryPop::ReleasQue()
+{
 	if (m_queImage.size() > 0)
 	{
 		while (TRUE)
@@ -331,7 +211,65 @@ CSharedMemory::~CSharedMemory()
 	}
 }
 
-void CSharedMemory::SetCritcalSection(BOOL isSet)
+BOOL CSharedMemoryPop::SharedMemoryPop()
+{
+	BOOL rslt = TRUE;
+	DWORD dwSize = sizeof(Mat) * 20;
+	m_hHandle = NULL;
+
+	if (m_nPopIdx > 10)
+		m_nPopIdx = 0;
+	DWORD dwStartAddr = sizeof(m_PopImg) * m_nPopIdx;
+	m_piMemory += dwStartAddr;
+
+	if (NULL != m_piMemory)
+	{
+		memcpy(&m_PopImg, m_piMemory, sizeof(Mat));
+		if (m_PopImg.rows != 0 && m_PopImg.cols != 0)
+		{
+			SetCritcalSection(TRUE);
+			CString strData1, strData2;
+			
+			for (int i = 0; i < 100; i++)
+			{
+				strData1.AppendFormat(_T("%C"), m_PopImg.data[i]);
+				if (m_queImage.size() > 0)
+					strData2.AppendFormat(_T("%C"), m_queImage.back().data[i]);
+			}
+				
+			if(strData1.Compare(strData2))
+				m_queImage.push(m_PopImg);
+			SetCritcalSection(FALSE);
+		}
+	}
+	else
+	{
+		AfxMessageBox(_T("MapView is NULL"));
+	}
+
+	if (m_queImage.size() > 0)
+	{
+		callEventfunc(0, 0);
+		m_nPopIdx++;
+	}
+
+	if (m_queImage.size() == 0)
+	{
+		rslt = FALSE;
+	}
+
+	return rslt;
+}
+
+void CSharedMemoryPush::SetCritcalSection(BOOL isSet)
+{
+	if (isSet)
+		m_Critcal->Lock();
+	else
+		m_Critcal->Unlock();
+}
+
+void CSharedMemoryPop::SetCritcalSection(BOOL isSet)
 {
 	if (isSet)
 		m_Critcal->Lock();
