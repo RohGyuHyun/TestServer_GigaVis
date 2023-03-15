@@ -413,11 +413,6 @@ void CTestServerGigaVisDlg::WriteClient()
 	delete[] byPacket;
 
 	m_PopMem->m_queImage.pop();
-
-	//if(m_PushMem->m_queImage.size() > 0)
-		//m_PushMem->m_queImage.pop();
-
-
 }
 
 BOOL CTestServerGigaVisDlg::SendCliendMessage(void* pData)
