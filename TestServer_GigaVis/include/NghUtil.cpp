@@ -1349,7 +1349,7 @@ BOOL GetFolderInFolderName(CString strFolder, vector<CString>* strRsltFolder)
 	return rslt;
 }
 
-BOOL GetFolderInFileName(CString strFolder, queue<CString>*strRsltFile)
+BOOL GetFolderInFileName(CString strFolder, queue<CString>*strRsltFile, CString strFileNameExtension)
 {
 	BOOL rslt = TRUE;
 	CFileFind ff;
@@ -1379,10 +1379,10 @@ BOOL GetFolderInFileName(CString strFolder, queue<CString>*strRsltFile)
 				continue;
 			}
 
+			if (!ff.GetFileName().Right(3).Compare(strFileNameExtension))
 			{
 				strRsltFile->push(ff.GetFileName());
-				rslt = FALSE;
-				//break;
+				rslt = TRUE;
 			}
 		}
 	}

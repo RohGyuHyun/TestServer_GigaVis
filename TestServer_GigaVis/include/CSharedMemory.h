@@ -1,5 +1,6 @@
 #pragma once
 
+//Image Data Load -> 공유메모리 Push Class
 class CSharedMemoryPush
 {
 protected:
@@ -13,15 +14,15 @@ public:
 
 	int m_nPushIdx;
 	CString m_strReadImagePath;
-	int *m_piMemory;
-	int* m_piFirstMemory;
+	int *m_piMemory;//Push SharedMemory Address
+	int* m_piFirstMemory;//First SharedMemory Address
 	queue < CString> m_strReadFilePath;
 	queue<Mat> m_queImage;
 	HANDLE m_hHandle;
-	void ReleasQue();
+	void ReleasQue();//Que Image Data Releas
 
-	BOOL m_bThreadEnd;
-	int m_nThreadDelayTime;
+	BOOL m_bThreadEnd;//Thread End Flag
+	int m_nThreadDelayTime;//Thread Sleep Time
 	CALLBACK_FUNCTION_Event callEventfunc;
 
 	void SetCritcalSection(CCriticalSection* Critcal) { m_Critcal = Critcal; };
@@ -29,6 +30,7 @@ public:
 	void SetCallBack(CALLBACK_FUNCTION_Event event) { callEventfunc = event; };
 };
 
+//공유메모리 Pop -> Image Data Client Send Class
 class CSharedMemoryPop
 {
 protected:
@@ -40,16 +42,16 @@ public:
 	BOOL SharedMemoryPop();
 
 	int m_nPopIdx;
-	int* m_piMemory;
-	int* m_piFirstMemory;
+	int* m_piMemory;//Pop SharedMemory Address
+	int* m_piFirstMemory;//First SharedMemory Address
 	queue<Mat> m_queImage;
 	Mat m_PopImg;
 	BOOL m_bSendReady;
 	HANDLE m_hHandle;
-	void ReleasQue();
+	void ReleasQue();//Que Image Data Releas
 
-	BOOL m_bThreadEnd;
-	int m_nThreadDelayTime;
+	BOOL m_bThreadEnd;//Thread End Flag
+	int m_nThreadDelayTime;//Thread Sleep Time
 	CALLBACK_FUNCTION_Event callEventfunc;
 
 	void SetCritcalSection(CCriticalSection* Critcal) { m_Critcal = Critcal; };

@@ -31,26 +31,24 @@ protected:
 	CLogFile* m_SendLog;
 	CLogFile* m_RcvLog;
 
-	CWinThread* m_pServerThread[2];
-	UINT static Thread0(LPVOID pParam);
-	UINT static Thread1(LPVOID pParam);
+	CWinThread* m_pServerThread[2];//0 : Image Data Load -> 공유메모리 Push, 1 : 공유메모리 Pop -> Image Data Client Send
+	UINT static Thread0(LPVOID pParam);//Image Data Load -> 공유메모리 Push Thread
+	UINT static Thread1(LPVOID pParam);//공유메모리 Pop -> Image Data Client Send Thread
 
 
-	CSharedMemoryPush *m_PushMem;
-	CSharedMemoryPop *m_PopMem;
+	CSharedMemoryPush *m_PushMem;//Image Data Load -> 공유메모리 Push Class
+	CSharedMemoryPop *m_PopMem;//공유메모리 Pop -> Image Data Client Send Class
 
 	Mat m_SendImg;
 
 	CCriticalSection m_Critcal;
-
-	int m_nTestIdx;
 private:
 	BOOL SendCliendMessage(void* pData);
-	BOOL InitThread(int nIdx);
-	BOOL EndThread(int nIdx);
+	BOOL InitThread(int nIdx);//Thread 초기화
+	BOOL EndThread(int nIdx);//THread 종료
 public:
-	void WriteClient();
-	void SetMaxReadCount(int nMaxCount);
+	void WriteClient();//Image Data Client Send
+	void SetMaxReadCount(int nMaxCount);//Select Folder File Count Pop Class Send Max Count Set
 
 
 // 구현입니다.

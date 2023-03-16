@@ -2,7 +2,6 @@
 #include "CSharedMemory.h"
 #include <iostream>
 
-//CSharedMemory* g_MainClass;
 #define SHARED_NAME			_T("Global/IMAGE_DATA_SHARED")
 
 BOOL CSharedMemoryPush::SharedMemoryPush()
@@ -11,8 +10,8 @@ BOOL CSharedMemoryPush::SharedMemoryPush()
 
 	if (m_strReadFilePath.size() == 0)
 	{
-		GetFolderInFileName(m_strReadImagePath, &m_strReadFilePath);
-		callEventfunc(1, m_strReadFilePath.size());
+		GetFolderInFileName(m_strReadImagePath, &m_strReadFilePath, _T("bmp"));
+		callEventfunc(1, (int)m_strReadFilePath.size());
 	}
 
 	if (m_strReadFilePath.size() == 0)
@@ -27,9 +26,6 @@ BOOL CSharedMemoryPush::SharedMemoryPush()
 	img = cv::imread(strFilePath.GetBuffer());
 	m_queImage.push(img);
 
-
-	if (m_nPushIdx > 10)
-		m_nPushIdx = 0;
 	DWORD dwStartAddr = sizeof(img) * m_nPushIdx;
 	m_piMemory += dwStartAddr;
 
@@ -67,16 +63,24 @@ void CSharedMemoryPush::ReleasQue()
 	}
 }
 
+void CSharedMemoryPush::SetCritcalSection(BOOL isSet)
+{
+	if (isSet)
+		m_Critcal->Lock();
+	else
+		m_Critcal->Unlock();
+}
+
 CSharedMemoryPush::CSharedMemoryPush()
 {
 	m_hHandle = NULL;
 	m_bThreadEnd = FALSE;
-	m_nThreadDelayTime = 1000;
+	m_nThreadDelayTime = 100;
 	m_nPushIdx = 0;
 	DWORD dwSize = 1024000;
 	HANDLE hFile = CreateFile(TEXT(".\\MMF.dat"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
-	//if (NULL != hFile)
+	if (NULL != hFile)
 	{
 		m_hHandle = ::CreateFileMapping(hFile/*INVALID_HANDLE_VALUE*/, NULL, PAGE_READWRITE, 0, /*sizeof(img)*/dwSize, SHARED_NAME);
 		if (NULL == m_hHandle)
@@ -137,12 +141,83 @@ CSharedMemoryPush::~CSharedMemoryPush()
 	ReleasQue();
 }
 
+
+/// //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void CSharedMemoryPop::ReleasQue()
+{
+	if (m_queImage.size() > 0)
+	{
+		while (TRUE)
+		{
+			m_queImage.pop();
+			if (m_queImage.size() == 0)
+				break;
+		}
+	}
+}
+
+BOOL CSharedMemoryPop::SharedMemoryPop()
+{
+	BOOL rslt = TRUE;
+	DWORD dwSize = sizeof(Mat) * 20;
+	m_hHandle = NULL;
+
+	DWORD dwStartAddr = sizeof(m_PopImg) * m_nPopIdx;
+	m_piMemory += dwStartAddr;
+
+	if (NULL != m_piMemory)
+	{
+		memcpy(&m_PopImg, m_piMemory, sizeof(Mat));
+		if (m_PopImg.rows != 0 && m_PopImg.cols != 0)
+		{
+			SetCritcalSection(TRUE);
+			CString strData1, strData2;
+			
+			for (int i = 0; i < 100; i++)
+			{
+				strData1.AppendFormat(_T("%C"), m_PopImg.data[i]);
+				if (m_queImage.size() > 0)
+					strData2.AppendFormat(_T("%C"), m_queImage.back().data[i]);
+			}
+				
+			if(strData1.Compare(strData2))
+				m_queImage.push(m_PopImg);
+			SetCritcalSection(FALSE);
+		}
+	}
+	else
+	{
+		AfxMessageBox(_T("MapView is NULL"));
+	}
+
+	if (m_queImage.size() > 0)
+	{
+		callEventfunc(0, 0);
+		m_nPopIdx++;
+	}
+
+	if (m_queImage.size() == 0)
+	{
+		rslt = FALSE;
+	}
+
+	return rslt;
+}
+
+void CSharedMemoryPop::SetCritcalSection(BOOL isSet)
+{
+	if (isSet)
+		m_Critcal->Lock();
+	else
+		m_Critcal->Unlock();
+}
+
 CSharedMemoryPop::CSharedMemoryPop()
 {
 	m_nMaxSendCount = 0;
 	m_hHandle = NULL;
 	m_bThreadEnd = FALSE;
-	m_nThreadDelayTime = 1000;
+	m_nThreadDelayTime = 100;
 	m_nPopIdx = 0;
 	m_PopImg.create(1544, 2064, CV_8UC3);
 	m_hHandle = NULL;
@@ -196,83 +271,4 @@ CSharedMemoryPop::~CSharedMemoryPop()
 	}
 
 	ReleasQue();
-}
-
-void CSharedMemoryPop::ReleasQue()
-{
-	if (m_queImage.size() > 0)
-	{
-		while (TRUE)
-		{
-			m_queImage.pop();
-			if (m_queImage.size() == 0)
-				break;
-		}
-	}
-}
-
-BOOL CSharedMemoryPop::SharedMemoryPop()
-{
-	BOOL rslt = TRUE;
-	DWORD dwSize = sizeof(Mat) * 20;
-	m_hHandle = NULL;
-
-	if (m_nPopIdx > 10)
-		m_nPopIdx = 0;
-	DWORD dwStartAddr = sizeof(m_PopImg) * m_nPopIdx;
-	m_piMemory += dwStartAddr;
-
-	if (NULL != m_piMemory)
-	{
-		memcpy(&m_PopImg, m_piMemory, sizeof(Mat));
-		if (m_PopImg.rows != 0 && m_PopImg.cols != 0)
-		{
-			SetCritcalSection(TRUE);
-			CString strData1, strData2;
-			
-			for (int i = 0; i < 100; i++)
-			{
-				strData1.AppendFormat(_T("%C"), m_PopImg.data[i]);
-				if (m_queImage.size() > 0)
-					strData2.AppendFormat(_T("%C"), m_queImage.back().data[i]);
-			}
-				
-			if(strData1.Compare(strData2))
-				m_queImage.push(m_PopImg);
-			SetCritcalSection(FALSE);
-		}
-	}
-	else
-	{
-		AfxMessageBox(_T("MapView is NULL"));
-	}
-
-	if (m_queImage.size() > 0)
-	{
-		callEventfunc(0, 0);
-		m_nPopIdx++;
-	}
-
-	if (m_queImage.size() == 0)
-	{
-		rslt = FALSE;
-	}
-
-	return rslt;
-}
-
-void CSharedMemoryPush::SetCritcalSection(BOOL isSet)
-{
-	if (isSet)
-		m_Critcal->Lock();
-	else
-		m_Critcal->Unlock();
-}
-
-void CSharedMemoryPop::SetCritcalSection(BOOL isSet)
-{
-	if (isSet)
-		m_Critcal->Lock();
-	else
-		m_Critcal->Unlock();
 }

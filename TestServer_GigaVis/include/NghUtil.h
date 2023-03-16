@@ -114,7 +114,7 @@ extern "C" __declspec(dllexport) void DeleteFolderAndFile(CString strPath);
 extern "C" __declspec(dllexport) BOOL CreateDir(LPCTSTR lpszDirectory);
 extern "C" __declspec(dllexport) BOOL FolderSearch(CString strFolder);
 extern "C" __declspec(dllexport) BOOL GetFolderInFolderName(CString strFolder, vector<CString>* strRsltFolder);
-extern "C" __declspec(dllexport) BOOL GetFolderInFileName(CString strFolder, queue<CString>*strRsltFile);
+extern "C" __declspec(dllexport) BOOL GetFolderInFileName(CString strFolder, queue<CString>*strRsltFile, CString strFileNameExtension);
 
 extern "C" __declspec(dllexport) double DegreeToRation(double deg);
 extern "C" __declspec(dllexport) double RatianToDegree(double rad);

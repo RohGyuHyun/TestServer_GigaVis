@@ -72,7 +72,6 @@ CTestServerGigaVisDlg::CTestServerGigaVisDlg(CWnd* pParent /*=nullptr*/)
 	m_bServerEnd = FALSE;
 	m_Server = NULL;
 	m_Client = NULL;
-	m_nTestIdx = 1;
 }
 
 void CTestServerGigaVisDlg::DoDataExchange(CDataExchange* pDX)
@@ -357,17 +356,14 @@ void CTestServerGigaVisDlg::WriteClient()
 	byData = new BYTE[nImageSize];
 	m_PopMem->SetCritcalSection(TRUE);
 	memcpy(byData, m_PopMem->CSharedMemoryPop::m_queImage.back().data, nImageSize);
-	CStringA strTemp;
-	strTemp.Format(("%S\\rslt\\SendTest_%03d.bmp"), m_Edit_strImagePath, m_nTestIdx++);
-	//imwrite(strTemp.GetBuffer(), m_PopMem->m_queImage.front());
 	m_PopMem->SetCritcalSection(FALSE);
 	strPacket.Format(_T("%d,%d,%d"), 1544, 2064, 16);
 	
 	int nPacketLen = nImageSize + strPacket.GetLength() + 2 + 3;
-	CStringA strTemp2;
-	strTemp2.Format((",%d,"), nPacketLen);
-	nPacketLen += strTemp2.GetLength() + 1;
-	strTemp2.Format((",%d,"), nPacketLen);
+	CStringA strTemp;
+	strTemp.Format((",%d,"), nPacketLen);
+	nPacketLen += strTemp.GetLength() + 1;
+	strTemp.Format((",%d,"), nPacketLen);
 	byPacket = new BYTE[nPacketLen];
 
 	int nIdx = 0;
@@ -386,9 +382,9 @@ void CTestServerGigaVisDlg::WriteClient()
 
 	int nStartIdx = nIdx;
 	nIdx = 0;
-	for (int i = 0; i < strTemp2.GetLength(); i++)
+	for (int i = 0; i < strTemp.GetLength(); i++)
 	{
-		byPacket[i + nStartIdx] = strTemp2.GetBuffer()[nIdx++];
+		byPacket[i + nStartIdx] = strTemp.GetBuffer()[nIdx++];
 	}
 	memcpy(&byPacket[nStartIdx + nIdx], byData, sizeof(BYTE) * (nImageSize));
 
@@ -755,6 +751,13 @@ LRESULT CTestServerGigaVisDlg::OnReceive(WPARAM wParam, LPARAM lParam)
 		strText.AppendFormat(_T("%C"), temp[i]);
 	
 	m_RcvLog->WriteText(strText, TRUE);
+
+
+	if (!strText.Mid(1, 3).Compare(_T("ERR")))
+	{
+		m_PopMem->m_nPopIdx--;
+	}
+
 
 	m_PopMem->m_bSendReady = TRUE;
 
