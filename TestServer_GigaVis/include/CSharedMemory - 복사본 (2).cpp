@@ -2,6 +2,8 @@
 #include "CSharedMemory.h"
 #include <iostream>
 
+#define SHARED_NAME			_T("Global/IMAGE_DATA_SHARED")
+
 BOOL CSharedMemoryPush::SharedMemoryPush()
 {
 	BOOL rslt = TRUE;

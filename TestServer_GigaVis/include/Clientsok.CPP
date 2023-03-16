@@ -25,14 +25,14 @@ void CClientSock::SetWnd(HWND hwnd)
 
 void CClientSock::OnReceive( int nErrorCode )
 {
-	TRACE("Errocode = %d",nErrorCode);
+	//TRACE("Errocode = %d",nErrorCode);
 	SendMessage(m_pHwnd,WM_RECEIVE_DATA,0,0);
 }
 
 void CClientSock::OnClose(int nErrorCode) 
 {
 	// TODO: Add your specialized code here and/or call the base class
-	TRACE("Errocode = %d",nErrorCode);
+	//TRACE("Errocode = %d",nErrorCode);
 	SendMessage(m_pHwnd, WM_CLOSE_SOCK, 0, 0);
 	
 

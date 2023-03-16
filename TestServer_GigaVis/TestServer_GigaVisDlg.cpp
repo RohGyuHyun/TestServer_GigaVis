@@ -14,15 +14,12 @@
 
 // 응용 프로그램 정보에 사용되는 CAboutDlg 대화 상자입니다.
 CTestServerGigaVisDlg* g_This;
-void SharedMmemoryCalbackFunc(int nType, int nCount)
+void SharedMmemoryCalbackFunc(int nType, Mat img)
 {
 	switch (nType)
 	{
 	case 0:
-		g_This->WriteClient();
-		break;
-	case 1:
-		g_This->SetMaxReadCount(nCount);
+		g_This->WriteClient(img);
 		break;
 	}
 }
@@ -65,8 +62,8 @@ END_MESSAGE_MAP()
 CTestServerGigaVisDlg::CTestServerGigaVisDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_TESTSERVER_GIGAVIS_DIALOG, pParent)
 	, m_Edit_strImagePath(_T(""))
-	, m_Edit_nThreadDelay0(100)
-	, m_Edit_nThreadDelay1(100)
+	, m_Edit_nThreadDelay0(1000)
+	, m_Edit_nThreadDelay1(1000)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	m_bServerEnd = FALSE;
@@ -190,6 +187,9 @@ BOOL CTestServerGigaVisDlg::OnInitDialog()
 	m_PushMem->SetCritcalSection(&m_Critcal);
 	m_PopMem->SetCritcalSection(&m_Critcal);
 
+	m_PushMem->SetImageQueue(&m_ShareData);
+	m_PopMem->SetImageQueue(&m_ShareData);
+
 	//m_Client = new CClientSock;
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
 }
@@ -248,6 +248,17 @@ HCURSOR CTestServerGigaVisDlg::OnQueryDragIcon()
 BOOL CTestServerGigaVisDlg::DestroyWindow()
 {
 	// TODO: 여기에 특수화된 코드를 추가 및/또는 기본 클래스를 호출합니다.
+
+	if (m_ShareData.size() > 0)
+	{
+		while (TRUE)
+		{
+			m_ShareData.pop();
+
+			if (m_ShareData.size() == 0)
+				break;
+		}
+	}
 
 	if (m_SendLog != NULL)
 	{
@@ -337,58 +348,42 @@ void CTestServerGigaVisDlg::OnBnClickedButtonSelectImagePath()
 	}
 }
 
-void CTestServerGigaVisDlg::WriteClient()
+void CTestServerGigaVisDlg::WriteClient(Mat img)
 {
-	//memcpy(&m_SendImg, &m_PopMem.m_queImage.front(), sizeof(Mat));
-
-	if (m_PopMem->CSharedMemoryPop::m_queImage.size() == 0)
-		return;
-
-	CString strPacket;
+	CString strPacket, strTemp;
 	BYTE* byData, *byPacket;
 	
-
-	int nWidth, nHeight, nBpp;
-	nWidth = m_PopMem->CSharedMemoryPop::m_queImage.back().cols;
-	nHeight = m_PopMem->CSharedMemoryPop::m_queImage.back().rows;
-	nBpp = 3;// m_PopMem->CSharedMemoryPop::m_queImage.front().channels();
+	int nWidth, nHeight, nBpp, nDepth;
+	nWidth = img.cols;
+	nHeight = img.rows;
+	nBpp = img.channels();
+	nDepth = img.depth();
+	
 	int nImageSize = nWidth * nHeight * nBpp;
 	byData = new BYTE[nImageSize];
-	m_PopMem->SetCritcalSection(TRUE);
-	memcpy(byData, m_PopMem->CSharedMemoryPop::m_queImage.back().data, nImageSize);
-	m_PopMem->SetCritcalSection(FALSE);
-	strPacket.Format(_T("%d,%d,%d"), 1544, 2064, 16);
+	memcpy(byData, img.data, nImageSize);
 	
-	int nPacketLen = nImageSize + strPacket.GetLength() + 2 + 3;
-	CStringA strTemp;
-	strTemp.Format((",%d,"), nPacketLen);
-	nPacketLen += strTemp.GetLength() + 1;
-	strTemp.Format((",%d,"), nPacketLen);
+	char* cImageData;
+	cImageData = new char[512];
+	memset(cImageData, NULL, sizeof(char) * 512);
+
+	strTemp.Format(_T("%C%d,%d,%d,%d,"), PACKET_CHAR_STX, nHeight, nWidth, nBpp, nDepth);
+	strPacket.Format(_T("%s%d,"), strTemp, strTemp.GetLength() + nImageSize + 1);
+	int nPacketLen = nImageSize + strPacket.GetLength() + 1;
+	strPacket.Format(_T("%s%d,"), strTemp, nPacketLen);
+	sprintf_s(cImageData, strPacket.GetLength() + 1, "%S", strPacket);
+
+	
 	byPacket = new BYTE[nPacketLen];
-
+	memset(byPacket, NULL, sizeof(BYTE) * nPacketLen);
 	int nIdx = 0;
-	byPacket[nIdx++] = PACKET_CHAR_STX;
-	byPacket[nIdx++] = '1';
-	byPacket[nIdx++] = '5';
-	byPacket[nIdx++] = '4';
-	byPacket[nIdx++] = '4';
-	byPacket[nIdx++] = ',';
-	byPacket[nIdx++] = '2';
-	byPacket[nIdx++] = '0';
-	byPacket[nIdx++] = '6';
-	byPacket[nIdx++] = '4';
-	byPacket[nIdx++] = ',';
-	byPacket[nIdx++] = '3';
 
-	int nStartIdx = nIdx;
-	nIdx = 0;
-	for (int i = 0; i < strTemp.GetLength(); i++)
+	for (int i = 0; i < strPacket.GetLength(); i++)
 	{
-		byPacket[i + nStartIdx] = strTemp.GetBuffer()[nIdx++];
+		byPacket[nIdx++] = cImageData[i];
 	}
-	memcpy(&byPacket[nStartIdx + nIdx], byData, sizeof(BYTE) * (nImageSize));
 
-	
+	memcpy(&byPacket[nIdx], byData, sizeof(BYTE) * (nImageSize));
 
 	byPacket[nPacketLen - 1] = PACKET_CHAR_ETX;
 
@@ -404,11 +399,9 @@ void CTestServerGigaVisDlg::WriteClient()
 	
 	m_SendLog->WriteText(strText, TRUE);
 
-
+	delete[] cImageData;
 	delete[] byData;
 	delete[] byPacket;
-
-	m_PopMem->CSharedMemoryPop::m_queImage.pop();
 }
 
 BOOL CTestServerGigaVisDlg::SendCliendMessage(void* pData)
@@ -426,25 +419,17 @@ BOOL CTestServerGigaVisDlg::InitThread(int nIdx)
 	{
 	case 0:
 	{
-		m_PushMem->CSharedMemoryPush::ReleasQue();
-		m_PushMem->m_nPushIdx = 0;
-		m_PushMem->m_piMemory = m_PushMem->m_piFirstMemory;
 		m_PushMem->m_strReadImagePath.Format(_T("%s"), m_Edit_strImagePath);
-		m_PushMem->SetCallBack(SharedMmemoryCalbackFunc);
 		m_pServerThread[0] = AfxBeginThread(Thread0, m_PushMem, THREAD_PRIORITY_NORMAL);
 		m_pServerThread[0]->m_bAutoDelete = FALSE;
-		SetTimer(0, 100, NULL);
 	}
 		break;
 	case 1:
 	{
-		m_PopMem->m_nPopIdx = 0;
 		m_PopMem->m_bSendReady = TRUE;
-		m_PopMem->m_piMemory = m_PopMem->m_piFirstMemory;
 		m_PopMem->SetCallBack(SharedMmemoryCalbackFunc);
 		m_pServerThread[1] = AfxBeginThread(Thread1, m_PopMem, THREAD_PRIORITY_NORMAL);
 		m_pServerThread[1]->m_bAutoDelete = FALSE;
-		SetTimer(1, 100, NULL);
 	}
 		break;
 	default:
@@ -498,11 +483,6 @@ UINT CTestServerGigaVisDlg::Thread0(LPVOID pParam)
 		pPush->SetCritcalSection(TRUE);
 		pPush->SharedMemoryPush();
 		pPush->SetCritcalSection(FALSE);
-		if (pPush->m_strReadFilePath.size() == 0)
-		{
-			pPush->m_bThreadEnd = TRUE;
-			break;
-		}
 
 		if (pPush->m_bThreadEnd)
 			break;
@@ -519,15 +499,12 @@ UINT CTestServerGigaVisDlg::Thread1(LPVOID pParam)
 	while (TRUE)
 	{
 		pPop->SetCritcalSection(TRUE);
-		if (pPop->m_bSendReady)
+		if (pPop->GetQueImageCount() > 0 && pPop->m_bSendReady)
 		{
 			pPop->m_bSendReady = FALSE;
 			pPop->SharedMemoryPop();
 		}
 		pPop->SetCritcalSection(FALSE);
-
-		if (pPop->m_nPopIdx == pPop->m_nMaxSendCount)
-			pPop->m_bThreadEnd = TRUE;
 
 		if (pPop->m_bThreadEnd)
 			break;
@@ -587,11 +564,6 @@ void CTestServerGigaVisDlg::OnBnClickedButtonThreadStart()
 	}
 
 	InitThread(nThreadIdx);
-}
-
-void CTestServerGigaVisDlg::SetMaxReadCount(int nMaxCount)
-{
-	m_PopMem->m_nMaxSendCount = nMaxCount;
 }
 
 void CTestServerGigaVisDlg::OnBnClickedButtonThreadStop()
@@ -755,7 +727,7 @@ LRESULT CTestServerGigaVisDlg::OnReceive(WPARAM wParam, LPARAM lParam)
 
 	if (!strText.Mid(1, 3).Compare(_T("ERR")))
 	{
-		m_PopMem->m_nPopIdx--;
+
 	}
 
 

@@ -30,6 +30,7 @@ protected:
 	BOOL m_bServerEnd;
 	CLogFile* m_SendLog;
 	CLogFile* m_RcvLog;
+	queue<Mat> m_ShareData;
 
 	CWinThread* m_pServerThread[2];//0 : Image Data Load -> 공유메모리 Push, 1 : 공유메모리 Pop -> Image Data Client Send
 	UINT static Thread0(LPVOID pParam);//Image Data Load -> 공유메모리 Push Thread
@@ -47,8 +48,7 @@ private:
 	BOOL InitThread(int nIdx);//Thread 초기화
 	BOOL EndThread(int nIdx);//THread 종료
 public:
-	void WriteClient();//Image Data Client Send
-	void SetMaxReadCount(int nMaxCount);//Select Folder File Count Pop Class Send Max Count Set
+	void WriteClient(Mat img);//Image Data Client Send
 
 
 // 구현입니다.
