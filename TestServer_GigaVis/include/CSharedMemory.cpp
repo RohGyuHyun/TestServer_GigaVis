@@ -29,9 +29,6 @@ BOOL CSharedMemoryPush::SharedMemoryPush()
 		m_strReadFilePath.pop();
 	}
 
-	GetCurrentProcess();
-
-
 	return rslt;
 }
 
